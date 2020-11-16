@@ -8,8 +8,8 @@ use Psr\Container\ContainerInterface;
 
 class Container implements ContainerInterface
 {
-    private array $services = [];
-    private array $tags = [];
+    protected array $services = [];
+    protected array $tags = [];
 
     public function get($id)
     {
