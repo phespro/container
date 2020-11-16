@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/phespro/container.svg?branch=main)](https://travis-ci.org/phespro/container)
+
 # phespro/container
 
 Super simple dependency injection container for php.
