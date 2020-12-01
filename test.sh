@@ -21,8 +21,9 @@ for option in "$@"; do
   esac
 done
 
+phpVersions=( "7.4" )
 
-for version in "7.4" # Later add further versions here
+for version in "${phpVersions[@]}"
 do
     docker build "$DIR" -t "phespro-container-php-$version" --build-arg "PHP_VERSION=$version"
     docker run -v "$DIR:/code" -w "/code" "phespro-container-php-$version" composer install --no-interaction --no-progress
