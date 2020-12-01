@@ -110,4 +110,14 @@ class ContainerTest extends TestCase
         $container->addFactory('some_id3', fn() => 'Hello World3', ['test_tag']);
         $this->assertEquals(['Hello World', 'Hello World2', 'Hello World3'], $container->getByTag('test_tag'));
     }
+
+    public function test_circularDependencyProtection()
+    {
+        $container = new Container;
+        $container->add('service1', fn(Container $c) => $c->get('service2'));
+        $container->add('service2', fn(Container $c) => $c->get('service3'));
+        $container->add('service3', fn(Container $c) => $c->get('service1'));
+        $this->expectException(ServiceNotFoundException::class);
+        $container->get('service1');
+    }
 }
