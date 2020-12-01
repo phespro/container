@@ -34,8 +34,15 @@ class Container implements ContainerInterface
         return isset($this->services[$id]);
     }
 
+    /**
+     * @param string $id
+     * @param callable $callable
+     * @param array $tags
+     * @throws ServiceAlreadyDefinedException
+     */
     public function add(string $id, callable $callable, array $tags = []): void
     {
+        $this->throwIfExists($id);
         $this->services[$id] = function (self $container) use ($callable) {
             static $result = null;
             if ($result === null) {
@@ -46,8 +53,15 @@ class Container implements ContainerInterface
         $this->addTags($id, $tags);
     }
 
+    /**
+     * @param string $id
+     * @param callable $callable
+     * @param array $tags
+     * @throws ServiceAlreadyDefinedException
+     */
     public function addFactory(string $id, callable $callable, array $tags = []): void
     {
+        $this->throwIfExists($id);
         $this->services[$id] = $callable;
         $this->addTags($id, $tags);
     }
@@ -84,6 +98,17 @@ class Container implements ContainerInterface
             } else {
                 $this->tags[$tag][] = $serviceId;
             }
+        }
+    }
+
+    /**
+     * @param string $id
+     * @throws ServiceAlreadyDefinedException
+     */
+    private function throwIfExists(string $id): void
+    {
+        if (isset($this->services[$id])) {
+            throw new ServiceAlreadyDefinedException("You tried to add the service $id, but it already added.");
         }
     }
 }

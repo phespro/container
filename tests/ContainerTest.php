@@ -3,6 +3,7 @@
 namespace Phespro\Container\Test;
 
 use Phespro\Container\Container;
+use Phespro\Container\ServiceAlreadyDefinedException;
 use Phespro\Container\ServiceNotFoundException;
 use PHPUnit\Framework\TestCase;
 
@@ -22,6 +23,14 @@ class ContainerTest extends TestCase
         $this->assertEquals(0, $container->get('some_singleton'));
     }
 
+    public function test_add_preventExisting()
+    {
+        $container = new Container;
+        $container->add('test', fn() => 'test');
+        $this->expectException(ServiceAlreadyDefinedException::class);
+        $container->add('test', fn() => 'test');
+    }
+
     public function test_factory()
     {
         $fnIncrement = function() {
@@ -34,6 +43,14 @@ class ContainerTest extends TestCase
 
         $this->assertEquals(0, $container->get('some_singleton'));
         $this->assertEquals(1, $container->get('some_singleton'));
+    }
+
+    public function test_addFactory_preventExisting()
+    {
+        $container = new Container;
+        $container->addFactory('test', fn() => 'test');
+        $this->expectException(ServiceAlreadyDefinedException::class);
+        $container->addFactory('test', fn() => 'test');
     }
 
     public function test_has()
