@@ -8,10 +8,17 @@ use Psr\Container\ContainerInterface;
 
 class Container implements ContainerInterface
 {
+    /**
+     * @var array<string, callable> Key is the service name, value is the service initiator
+     */
     protected array $services = [];
+
+    /**
+     * @var array<string, string> Key is the tag name, value is the service name
+     */
     protected array $tags = [];
 
-    public function get($id)
+    public function get(string $id): mixed
     {
         if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
         $fun = $this->services[$id];
@@ -90,7 +97,7 @@ class Container implements ContainerInterface
         $this->services[$id] = fn(Container $container) => $callable($container, fn() => $previous($this));
     }
 
-    private function addTags(string $serviceId, array $tags = [])
+    private function addTags(string $serviceId, array $tags = []): void
     {
         foreach ($tags as $tag) {
             if (!isset($this->tags[$tag])) {
