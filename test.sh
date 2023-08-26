@@ -21,7 +21,7 @@ for option in "$@"; do
   esac
 done
 
-phpVersions=( "7.4" )
+phpVersions=( "8.2" )
 
 for version in "${phpVersions[@]}"
 do
