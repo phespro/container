@@ -4,7 +4,7 @@
 
 Super simple dependency injection container for php.
 
-- Only 89 lines of code
+- Only 121 lines of code
 - No cache required
 - Includes tagging and decorating
 - 100% line coverage & 100% mutation coverage
