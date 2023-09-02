@@ -14,17 +14,34 @@ class Container implements ContainerInterface
     protected array $services = [];
 
     /**
-     * @var array<string, string> Key is the tag name, value is the service name
+     * @var array<string, array<int, string>> Key is the tag name, value is an array of service names
      */
     protected array $tags = [];
 
+    /**
+     * @var array<string, array<int, string>> Used for figuring out which tags from a service
+     */
+    protected array $tagsReverse = [];
+
+    /** @var array<string, array<int, callable>> */
+    protected array $tagDecorator = [];
+
     public function get(string $id): mixed
     {
-        if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
+        if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found. Either the service was not registered or you have a circular dependency.");
         $fun = $this->services[$id];
         unset($this->services[$id]); // prevent circular dependency
         $result = $fun($this);
         $this->services[$id] = $fun; // re add service function after fetching service
+
+        $tags = $this->tagsReverse[$id];
+        foreach($tags as $tag) {
+            $tagDecorators = $this->tagDecorator[$tag];
+            foreach($tagDecorators as $tagDecorator) {
+                $result = $tagDecorator($this, $result);
+            }
+        }
+
         return $result;
     }
 
@@ -97,6 +114,15 @@ class Container implements ContainerInterface
         $this->services[$id] = fn(Container $container) => $callable($container, fn() => $previous($this));
     }
 
+    public function decorateTag(string $tag, callable $callable): void
+    {
+        if(isset($this->tagDecorator[$tag])) {
+            $this->tagDecorator[$tag][] = $callable;
+        } else {
+            $this->tagDecorator[$tag] = [$callable];
+        }
+    }
+
     private function addTags(string $serviceId, array $tags = []): void
     {
         foreach ($tags as $tag) {
@@ -106,6 +132,7 @@ class Container implements ContainerInterface
                 $this->tags[$tag][] = $serviceId;
             }
         }
+        $this->tagsReverse[$serviceId] = $tags;
     }
 
     /**

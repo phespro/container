@@ -6,6 +6,7 @@ use Phespro\Container\Container;
 use Phespro\Container\ServiceAlreadyDefinedException;
 use Phespro\Container\ServiceNotFoundException;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 class ContainerTest extends TestCase
 {
@@ -119,5 +120,16 @@ class ContainerTest extends TestCase
         $container->add('service3', fn(Container $c) => $c->get('service1'));
         $this->expectException(ServiceNotFoundException::class);
         $container->get('service1');
+    }
+
+    public function test_decorateTag()
+    {
+        $container = new Container;
+        $container->addFactory('service1', fn() => 'hello', ['myTag']);
+        $container->addFactory('service2', fn() => 'hello', ['myOtherTag']);
+        $container->decorateTag('myTag', fn(ContainerInterface $c, string $inner) => "$inner world");
+        $this->assertEquals('hello world', $container->get('service1'), 'Decorator tag should decorate on calling get()');
+        $this->assertEquals('hello world', $container->getByTag('myTag')[0], 'Decorator tag should decorate on calling getByTag()');
+        $this->assertEquals('hello', $container->get('service2'));
     }
 }
