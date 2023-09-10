@@ -111,11 +111,11 @@ class Container implements ContainerInterface
     {
         $this->globalDecorator[] = match ($type) {
             Type::SINGLETON => function(Container $container, mixed $inner, string $serviceId, array $tags) use ($callable) {
-                static $result = null;
-                if ($result === null) {
-                    $result = $callable($container, $inner, $serviceId, $tags);
+                static $result = [];
+                if (isset($result[$serviceId])) {
+                    return $result[$serviceId];
                 }
-                return $result;
+                return $result[$serviceId] = $callable($container, $inner, $serviceId, $tags);
             },
             Type::FACTORY => $callable
         };

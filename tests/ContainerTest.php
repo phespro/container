@@ -115,14 +115,22 @@ class ContainerTest extends TestCase
     {
         $container = new Container;
         $container->add('service1', fn() => 'hello', ['tag1']);
+        $container->add('service2', fn() => 'hallo', ['tag2']);
         $container->decorateAll(
             function(ContainerInterface $container, string $decorated, string $serviceName, array $tags) use (&$hasBeenRun) {
-                $this->assertEquals('hello', $decorated);
-                $this->assertEquals('service1', $serviceName);
-                $this->assertEquals(['tag1'], $tags);
+                if ($serviceName === 'service1') {
+                    $this->assertEquals('hello', $decorated);
+                    $this->assertEquals(['tag1'], $tags);
+                } else {
+                    $this->assertEquals('hallo', $decorated);
+                    $this->assertEquals('service2', $serviceName);
+                    $this->assertEquals(['tag2'], $tags);
+                }
+
                 return $decorated . ' world';
             }
         );
         $this->assertEquals('hello world', $container->get('service1'));
+        $this->assertEquals('hallo world', $container->get('service2'));
     }
 }
