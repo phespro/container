@@ -5,7 +5,9 @@ namespace Phespro\Container\Test;
 use Phespro\Container\Container;
 use Phespro\Container\ServiceAlreadyDefinedException;
 use Phespro\Container\ServiceNotFoundException;
+use Phespro\Container\Type;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 class ContainerTest extends TestCase
 {
@@ -39,7 +41,7 @@ class ContainerTest extends TestCase
         };
 
         $container = new Container();
-        $container->addFactory('some_singleton', $fnIncrement);
+        $container->add('some_singleton', $fnIncrement, type: Type::FACTORY);
 
         $this->assertEquals(0, $container->get('some_singleton'));
         $this->assertEquals(1, $container->get('some_singleton'));
@@ -48,9 +50,9 @@ class ContainerTest extends TestCase
     public function test_addFactory_preventExisting()
     {
         $container = new Container;
-        $container->addFactory('test', fn() => 'test');
+        $container->add('test', fn() => 'test', type: Type::FACTORY);
         $this->expectException(ServiceAlreadyDefinedException::class);
-        $container->addFactory('test', fn() => 'test');
+        $container->add('test', fn() => 'test', type: Type::FACTORY);
     }
 
     public function test_has()
@@ -68,21 +70,9 @@ class ContainerTest extends TestCase
         (new Container)->get('some_id');
     }
 
-    public function test_decorate_serviceNotFoundException()
-    {
-        $this->expectException(ServiceNotFoundException::class);
-        (new Container)->decorate('some_id', fn() => 'Hello');
-    }
-
-    public function test_decorateWithFactory_serviceNotFoundException()
-    {
-        $this->expectException(ServiceNotFoundException::class);
-        (new Container)->decorateWithFactory('some_id', fn() => 'Hello');
-    }
-
     public function test_decorator()
     {
-        $fnDecorator = fn(Container $c, callable $prev) => $prev() + 1;
+        $fnDecorator = fn(Container $c, int $inner) => $inner + 1;
 
         $container = new Container();
         $container->add('some_id', fn() => 1);
@@ -93,11 +83,11 @@ class ContainerTest extends TestCase
         $container->decorate('some_id', $fnDecorator);
         $this->assertEquals(3, $container->get('some_id'));
 
-        $fnDecoratorFactory = function(Container $c, callable $prev) {
+        $fnDecoratorFactory = function(Container $c, int $inner) {
             static $x = 0;
-            return $prev() + ++$x;
+            return $inner + ++$x;
         };
-        $container->decorateWithFactory('some_id', $fnDecoratorFactory);
+        $container->decorate('some_id', $fnDecoratorFactory, Type::FACTORY);
         $this->assertEquals(4, $container->get('some_id'));
         $this->assertEquals(5, $container->get('some_id'));
     }
@@ -107,7 +97,7 @@ class ContainerTest extends TestCase
         $container = new Container;
         $container->add('some_id', fn() => 'Hello World', ['test_tag']);
         $container->add('some_id2', fn() => 'Hello World2', ['test_tag']);
-        $container->addFactory('some_id3', fn() => 'Hello World3', ['test_tag']);
+        $container->add('some_id3', fn() => 'Hello World3', ['test_tag'], Type::FACTORY);
         $this->assertEquals(['Hello World', 'Hello World2', 'Hello World3'], $container->getByTag('test_tag'));
     }
 
@@ -119,5 +109,20 @@ class ContainerTest extends TestCase
         $container->add('service3', fn(Container $c) => $c->get('service1'));
         $this->expectException(ServiceNotFoundException::class);
         $container->get('service1');
+    }
+
+    public function test_decorateAll()
+    {
+        $container = new Container;
+        $container->add('service1', fn() => 'hello', ['tag1']);
+        $container->decorateAll(
+            function(ContainerInterface $container, string $decorated, string $serviceName, array $tags) use (&$hasBeenRun) {
+                $this->assertEquals('hello', $decorated);
+                $this->assertEquals('service1', $serviceName);
+                $this->assertEquals(['tag1'], $tags);
+                return $decorated . ' world';
+            }
+        );
+        $this->assertEquals('hello world', $container->get('service1'));
     }
 }

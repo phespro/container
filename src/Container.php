@@ -14,18 +14,39 @@ class Container implements ContainerInterface
     protected array $services = [];
 
     /**
-     * @var array<string, string> Key is the tag name, value is the service name
+     * @var array<string, string> Key is the tag name, value is an array of service names
      */
     protected array $tags = [];
+
+    /**
+     * @var array<string, array<int, string>> Key is the service name and value is array of tags
+     */
+    protected array $tagsReverse = [];
+
+    /**
+     * @var array<string, array<int, callable>>
+     */
+    protected array $decorator = [];
+
+    /** @var array<int, callable> */
+    protected array $globalDecorator = [];
 
     public function get(string $id): mixed
     {
         if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
-        $fun = $this->services[$id];
+        $callable = $this->services[$id];
         unset($this->services[$id]); // prevent circular dependency
-        $result = $fun($this);
-        $this->services[$id] = $fun; // re add service function after fetching service
-        return $result;
+        $service = $callable($this);
+
+        foreach($this->decorator[$id] as $decorator) {
+            $service = $decorator($this, $service);
+        }
+        foreach($this->globalDecorator as $globalDecorator) {
+            $service = $globalDecorator($this, $service, $id, $this->tagsReverse[$id] ?? []);
+        }
+
+        $this->services[$id] = $callable; // re add service initiator after fetching service
+        return $service;
     }
 
     public function getByTag(string $tag): array
@@ -45,56 +66,59 @@ class Container implements ContainerInterface
      * @param string $id
      * @param callable $callable
      * @param array $tags
+     * @param Type $type
      * @throws ServiceAlreadyDefinedException
      */
-    public function add(string $id, callable $callable, array $tags = []): void
+    public function add(string $id, callable $callable, array $tags = [], Type $type = Type::SINGLETON): void
     {
         $this->throwIfExists($id);
-        $this->services[$id] = function (self $container) use ($callable) {
-            static $result = null;
-            if ($result === null) {
-                $result = $callable($container);
-            }
-            return $result;
+
+        $this->services[$id] = match ($type) {
+            Type::SINGLETON => function (self $container) use ($callable) {
+                static $result = null;
+                if ($result === null) {
+                    $result = $callable($container);
+                }
+                return $result;
+            },
+            Type::FACTORY => $callable,
         };
+
         $this->addTags($id, $tags);
     }
 
-    /**
-     * @param string $id
-     * @param callable $callable
-     * @param array $tags
-     * @throws ServiceAlreadyDefinedException
-     */
-    public function addFactory(string $id, callable $callable, array $tags = []): void
+    public function decorate(string $id, callable $callable, Type $type = Type::SINGLETON): void
     {
-        $this->throwIfExists($id);
-        $this->services[$id] = $callable;
-        $this->addTags($id, $tags);
-    }
-
-    public function decorate(string $id, callable $callable): void
-    {
-        if (!isset($this->services[$id])) {
-            throw new ServiceNotFoundException("You tried decorating service $id, but no such service exists");
-        }
-        $previous = $this->services[$id];
-        $this->services[$id] = function(Container $container) use ($callable, $previous) {
-            static $result = null;
-            if ($result === null) {
-                $result = $callable($container, fn() => $previous($container));
-            }
-            return $result;
+        $item = match($type) {
+            Type::SINGLETON => function(Container $container, mixed $inner) use ($callable) {
+                static $result = null;
+                if ($result === null) {
+                    $result = $callable($container, $inner);
+                }
+                return $result;
+            },
+            Type::FACTORY => $callable,
         };
+
+        if (isset($this->decorator[$id])) {
+            $this->decorator[$id][] = $item;
+        } else {
+            $this->decorator[$id] = [$item];
+        }
     }
 
-    public function decorateWithFactory(string $id, callable $callable): void
+    public function decorateAll(callable $callable, Type $type = Type::SINGLETON): void
     {
-        if (!isset($this->services[$id])) {
-            throw new ServiceNotFoundException("You tried decorating service $id, but no such service exists");
-        }
-        $previous = $this->services[$id];
-        $this->services[$id] = fn(Container $container) => $callable($container, fn() => $previous($this));
+        $this->globalDecorator[] = match ($type) {
+            Type::SINGLETON => function(Container $container, mixed $inner, string $serviceId, array $tags) use ($callable) {
+                static $result = null;
+                if ($result === null) {
+                    $result = $callable($container, $inner, $serviceId, $tags);
+                }
+                return $result;
+            },
+            Type::FACTORY => $callable
+        };
     }
 
     private function addTags(string $serviceId, array $tags = []): void
@@ -105,6 +129,12 @@ class Container implements ContainerInterface
             } else {
                 $this->tags[$tag][] = $serviceId;
             }
+        }
+
+        if (isset($this->tagsReverse[$serviceId])) {
+            $this->tagsReverse[$serviceId] = array_merge($this->tagsReverse[$serviceId], $tags);
+        } else {
+            $this->tagsReverse[$serviceId] = $tags;
         }
     }
 
