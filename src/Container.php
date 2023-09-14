@@ -38,7 +38,7 @@ class Container implements ContainerInterface
         unset($this->services[$id]); // prevent circular dependency
         $service = $callable($this);
 
-        foreach($this->decorator[$id] as $decorator) {
+        foreach($this->decorator[$id] ?? [] as $decorator) {
             $service = $decorator($this, $service);
         }
         foreach($this->globalDecorator as $globalDecorator) {
