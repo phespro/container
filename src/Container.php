@@ -36,16 +36,18 @@ class Container implements ContainerInterface
         if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
         $callable = $this->services[$id];
         unset($this->services[$id]); // prevent circular dependency
-        $service = $callable($this);
+        try {
+            $service = $callable($this);
 
-        foreach($this->decorator[$id] ?? [] as $decorator) {
-            $service = $decorator($this, $service);
+            foreach($this->decorator[$id] ?? [] as $decorator) {
+                $service = $decorator($this, $service);
+            }
+            foreach($this->globalDecorator as $globalDecorator) {
+                $service = $globalDecorator($this, $service, $id, $this->tagsReverse[$id] ?? []);
+            }
+        } finally {
+            $this->services[$id] = $callable; // re add service initiator after fetching service
         }
-        foreach($this->globalDecorator as $globalDecorator) {
-            $service = $globalDecorator($this, $service, $id, $this->tagsReverse[$id] ?? []);
-        }
-
-        $this->services[$id] = $callable; // re add service initiator after fetching service
         return $service;
     }
 
