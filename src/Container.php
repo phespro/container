@@ -31,6 +31,11 @@ class Container implements ContainerInterface
     /** @var array<int, callable> */
     protected array $globalDecorator = [];
 
+    /**
+     * @param string $id
+     * @return mixed
+     * @throws ServiceNotFoundException
+     */
     public function get(string $id): mixed
     {
         if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
@@ -49,6 +54,23 @@ class Container implements ContainerInterface
             $this->services[$id] = $callable; // re add service initiator after fetching service
         }
         return $service;
+    }
+
+    /**
+     * Static code analysis compatible wrapper around method `get`.
+     * The method `get` is compatible with any type (e.g. scalar types). Since it's not possible to express this with
+     * a type template (generic), I decided to define a separate function only usable for fetching objects from container.
+     *
+     * @template T
+     * @param class-string<T> $id
+     * @return T
+     * @throws ServiceNotFoundException
+     */
+    public function getObject(string $id): mixed
+    {
+        $result = $this->get($id);
+        assert($result instanceof $id);
+        return $result;
     }
 
     public function getByTag(string $tag): array
