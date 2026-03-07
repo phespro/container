@@ -4,45 +4,61 @@
 namespace Phespro\Container;
 
 
-use Psr\Container\ContainerInterface;
+use Closure;
 
 class Container implements ContainerInterface
 {
     /**
-     * @var array<string, callable> Key is the service name, value is the service initiator
+     * @var array<string, Declaration> Key is the service name, value is declaration (initializer + type)
      */
-    protected array $services = [];
+    protected(set) array $services = [];
 
     /**
      * @var array<string, string> Key is the tag name, value is an array of service names
      */
-    protected array $tags = [];
+    protected(set) array $tags = [];
 
     /**
      * @var array<string, array<int, string>> Key is the service name and value is array of tags
      */
-    protected array $tagsReverse = [];
+    protected(set) array $tagsReverse = [];
 
     /**
      * @var array<string, array<int, callable>>
      */
-    protected array $decorator = [];
+    protected(set) array $decorator = [];
 
     /** @var array<int, callable> */
-    protected array $globalDecorator = [];
+    protected(set) array $globalDecorator = [];
+
+    protected(set) array $resolved = [];
+
+    public function __construct(
+        protected readonly ?Container $originalScope = null,
+    ) {}
 
     /**
      * @param string $id
      * @return mixed
      * @throws ServiceNotFoundException
+     * @throws CircularDependencyException
      */
     public function get(string $id): mixed
     {
+        if (isset($this->resolved[$id])) {
+            return $this->resolved[$id];
+        }
+
         if (!isset($this->services[$id])) throw new ServiceNotFoundException("Service '$id' not found.");
-        $callable = $this->services[$id];
-        unset($this->services[$id]); // prevent circular dependency
+        $declaration = $this->services[$id];
+
+        if ($declaration->currentInResolve) {
+            throw new CircularDependencyException("Circular service dependency detected for service '$id'");
+        }
+        $declaration->currentInResolve = true;
+
         try {
-            $service = $callable($this);
+            $service = $declaration->resolve($this);
 
             foreach($this->decorator[$id] ?? [] as $decorator) {
                 $service = $decorator($this, $service);
@@ -50,8 +66,12 @@ class Container implements ContainerInterface
             foreach($this->globalDecorator as $globalDecorator) {
                 $service = $globalDecorator($this, $service, $id, $this->tagsReverse[$id] ?? []);
             }
+
+            if ($declaration->type !== Type::FACTORY) {
+                $this->resolved[$id] = $service;
+            }
         } finally {
-            $this->services[$id] = $callable; // re add service initiator after fetching service
+            $declaration->currentInResolve = false;
         }
         return $service;
     }
@@ -64,7 +84,7 @@ class Container implements ContainerInterface
      * @template T
      * @param class-string<T> $id
      * @return T
-     * @throws ServiceNotFoundException
+     * @throws ServiceNotFoundException|CircularDependencyException
      */
     public function getObject(string $id): mixed
     {
@@ -88,61 +108,33 @@ class Container implements ContainerInterface
 
     /**
      * @param string $id
-     * @param callable $callable
+     * @param Closure $initializer
      * @param array $tags
      * @param Type $type
      * @throws ServiceAlreadyDefinedException
      */
-    public function add(string $id, callable $callable, array $tags = [], Type $type = Type::SINGLETON): void
+    public function add(string $id, Closure $initializer, array $tags = [], Type $type = Type::SINGLETON): void
     {
         $this->throwIfExists($id);
-
-        $this->services[$id] = match ($type) {
-            Type::SINGLETON => function (self $container) use ($callable) {
-                static $result = null;
-                if ($result === null) {
-                    $result = $callable($container);
-                }
-                return $result;
-            },
-            Type::FACTORY => $callable,
-        };
-
+        $this->services[$id] = new Declaration(
+            $initializer,
+            $type,
+        );
         $this->addTags($id, $tags);
     }
 
-    public function decorate(string $id, callable $callable, Type $type = Type::SINGLETON): void
+    public function decorate(string $id, callable $callable): void
     {
-        $item = match($type) {
-            Type::SINGLETON => function(Container $container, mixed $inner) use ($callable) {
-                static $result = null;
-                if ($result === null) {
-                    $result = $callable($container, $inner);
-                }
-                return $result;
-            },
-            Type::FACTORY => $callable,
-        };
-
         if (isset($this->decorator[$id])) {
-            $this->decorator[$id][] = $item;
+            $this->decorator[$id][] = $callable;
         } else {
-            $this->decorator[$id] = [$item];
+            $this->decorator[$id] = [$callable];
         }
     }
 
-    public function decorateAll(callable $callable, Type $type = Type::SINGLETON): void
+    public function decorateAll(callable $callable): void
     {
-        $this->globalDecorator[] = match ($type) {
-            Type::SINGLETON => function(Container $container, mixed $inner, string $serviceId, array $tags) use ($callable) {
-                static $result = [];
-                if (isset($result[$serviceId])) {
-                    return $result[$serviceId];
-                }
-                return $result[$serviceId] = $callable($container, $inner, $serviceId, $tags);
-            },
-            Type::FACTORY => $callable
-        };
+        $this->globalDecorator[] = $callable;
     }
 
     private function addTags(string $serviceId, array $tags = []): void
@@ -171,5 +163,10 @@ class Container implements ContainerInterface
         if (isset($this->services[$id])) {
             throw new ServiceAlreadyDefinedException("You tried to add the service $id, but it already added.");
         }
+    }
+
+    public function newScope(): Scope
+    {
+        return new Scope($this);
     }
 }

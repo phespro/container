@@ -2,6 +2,7 @@
 
 namespace Phespro\Container\Test;
 
+use Phespro\Container\CircularDependencyException;
 use Phespro\Container\Container;
 use Phespro\Container\ServiceAlreadyDefinedException;
 use Phespro\Container\ServiceNotFoundException;
@@ -75,21 +76,19 @@ class ContainerTest extends TestCase
         $fnDecorator = fn(Container $c, int $inner) => $inner + 1;
 
         $container = new Container();
-        $container->add('some_id', fn() => 1);
+        $container->add('some_id', fn() => 1, type: Type::SINGLETON);
         $container->decorate('some_id', $fnDecorator);
         $this->assertEquals(2, $container->get('some_id'));
         $this->assertEquals(2, $container->get('some_id'));
 
-        $container->decorate('some_id', $fnDecorator);
-        $this->assertEquals(3, $container->get('some_id'));
-
+        $container->add('other_id', fn() => 1, type: Type::FACTORY);
         $fnDecoratorFactory = function(Container $c, int $inner) {
             static $x = 0;
             return $inner + ++$x;
         };
-        $container->decorate('some_id', $fnDecoratorFactory, Type::FACTORY);
-        $this->assertEquals(4, $container->get('some_id'));
-        $this->assertEquals(5, $container->get('some_id'));
+        $container->decorate('other_id', $fnDecoratorFactory);
+        $this->assertEquals(2, $container->get('other_id'));
+        $this->assertEquals(3, $container->get('other_id'));
     }
 
     public function test_tags()
@@ -107,7 +106,7 @@ class ContainerTest extends TestCase
         $container->add('service1', fn(Container $c) => $c->get('service2'));
         $container->add('service2', fn(Container $c) => $c->get('service3'));
         $container->add('service3', fn(Container $c) => $c->get('service1'));
-        $this->expectException(ServiceNotFoundException::class);
+        $this->expectException(CircularDependencyException::class);
         $container->get('service1');
     }
 

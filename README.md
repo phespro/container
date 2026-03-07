@@ -55,3 +55,29 @@ $container->decorate('some_id', fn(Container $c, callable $prev) => new Decorato
 // or decorate it with factory
 $container->decorateWithFactory('some_id', fn(Container $c, callable $prev) => new Decorator($prev()));
 ```
+
+## Scoping
+
+Depending on the type of execution model you are running your PHP app, you might have multiple requests / commands per
+process.
+
+In this case you might consider using scoped services. A scoped service is used for one specific execution context.
+
+### Scoping example
+
+```php
+<?php
+
+$container = new Container();
+$container->add('your-service-id', fn() => new YourService, Type::SCOPED);
+
+$service1 = $scope->get('your-service-id');
+$scope = $container->newScope();
+$service2 = $scope->get('your-service-id');
+$service3 = $scope->get('your-service-id');
+
+// $service1 === $service2 -> false -> different instance
+// $service1 === $service3 -> false -> different instance
+// $service2 === $service3 -> true -> same instance because it's the same scope
+```
+
